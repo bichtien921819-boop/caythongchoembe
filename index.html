@@ -146,6 +146,7 @@
         let scene, camera, renderer;
         let groupGold, groupRed, groupGift; 
         let photoMeshes = [];    
+        let photoTargets = [];
         let titleMesh, starMesh, loveMesh;
         
         let state = 'TREE'; 
@@ -265,22 +266,61 @@
             return points;
         }
 
-        function createPhotos() {
-            const geo = new THREE.PlaneGeometry(8, 8);
-            const borderGeo = new THREE.PlaneGeometry(9, 9); 
-            const borderMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 }); 
+        // function createPhotos() {
+        //     const geo = new THREE.PlaneGeometry(8, 8);
+        //     const borderGeo = new THREE.PlaneGeometry(9, 9); 
+        //     const borderMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 }); 
 
-            for(let i=0; i<photoFiles.length; i++) {
-                const mat = new THREE.MeshBasicMaterial({ map: photoTextures[i], side: THREE.DoubleSide });
-                const mesh = new THREE.Mesh(geo, mat);
-                const border = new THREE.Mesh(borderGeo, borderMat);
-                border.position.z = -0.1; 
-                mesh.add(border);
-                mesh.visible = false; mesh.scale.set(0,0,0);
-                scene.add(mesh);
-                photoMeshes.push(mesh);
-            }
-        }
+        //     for(let i=0; i<photoFiles.length; i++) {
+        //         const mat = new THREE.MeshBasicMaterial({ map: photoTextures[i], side: THREE.DoubleSide });
+        //         const mesh = new THREE.Mesh(geo, mat);
+        //         const border = new THREE.Mesh(borderGeo, borderMat);
+        //         border.position.z = -0.1; 
+        //         mesh.add(border);
+        //         mesh.visible = false; mesh.scale.set(0,0,0);
+        //         scene.add(mesh);
+        //         photoMeshes.push(mesh);
+        //     }
+        // }
+
+        function createPhotos() {
+    const geo = new THREE.PlaneGeometry(8, 8);
+    const borderGeo = new THREE.PlaneGeometry(9, 9);
+    const borderMat = new THREE.MeshBasicMaterial({ color: 0xFFD700 });
+
+    for (let i = 0; i < photoFiles.length; i++) {
+
+        // 🌲 Random tree distribution
+        const h = Math.random() * CONFIG.treeHeight;
+        const y = h - CONFIG.treeHeight / 2;
+
+        const maxR = (1 - h / CONFIG.treeHeight) * CONFIG.treeBaseRadius;
+        const r = Math.sqrt(Math.random()) * maxR;
+        const theta = Math.random() * Math.PI * 2;
+
+        const x = r * Math.cos(theta);
+        const z = r * Math.sin(theta);
+
+        photoTargets.push(new THREE.Vector3(x, y, z));
+
+        const mat = new THREE.MeshBasicMaterial({
+            map: photoTextures[i],
+            side: THREE.DoubleSide
+        });
+
+        const mesh = new THREE.Mesh(geo, mat);
+        const border = new THREE.Mesh(borderGeo, borderMat);
+        border.position.z = -0.1;
+        mesh.add(border);
+
+        mesh.visible = false;
+        mesh.scale.set(0, 0, 0);
+
+        scene.add(mesh);
+        photoMeshes.push(mesh);
+    }
+}
+
 
         function createDecorations() {
             // MERRY CHRISTMAS Vandiep
@@ -435,28 +475,47 @@
                 const s = 1 + Math.abs(Math.sin(time*3))*0.1;
                 loveMesh.scale.set(s,s,1);
 
-            } else if (state === 'EXPLODE') {
-                titleMesh.visible = false; starMesh.visible = false; loveMesh.visible = false;
-                const baseAngle = groupGold.rotation.y; 
-                const angleStep = (Math.PI * 2) / photoMeshes.length;
-                let bestIdx = 0; let maxZ = -999;
-                photoMeshes.forEach((mesh, i) => {
-                    mesh.visible = true;
-                    const angle = baseAngle + i * angleStep;
-                    const x = Math.sin(angle) * CONFIG.photoOrbitRadius;
-                    const z = Math.cos(angle) * CONFIG.photoOrbitRadius;
-                    const y = Math.sin(time + i) * 3; 
-                    mesh.position.lerp(new THREE.Vector3(x, y, z), 0.1);
-                    mesh.lookAt(camera.position);
-                    if (z > maxZ) { maxZ = z; bestIdx = i; }
-                    if (z > 5) { 
-                        const ds = 1.0 + (z/CONFIG.photoOrbitRadius)*0.8; 
-                        mesh.scale.lerp(new THREE.Vector3(ds, ds, ds), 0.1);
-                    } else {
-                        mesh.scale.lerp(new THREE.Vector3(0.6, 0.6, 0.6), 0.1);
-                    }
-                });
-                selectedIndex = bestIdx;
+            // } else if (state === 'EXPLODE') {
+            //     titleMesh.visible = false; starMesh.visible = false; loveMesh.visible = false;
+            //     const baseAngle = groupGold.rotation.y; 
+            //     const angleStep = (Math.PI * 2) / photoMeshes.length;
+            //     let bestIdx = 0; let maxZ = -999;
+            //     photoMeshes.forEach((mesh, i) => {
+            //         mesh.visible = true;
+            //         const angle = baseAngle + i * angleStep;
+            //         const x = Math.sin(angle) * CONFIG.photoOrbitRadius;
+            //         const z = Math.cos(angle) * CONFIG.photoOrbitRadius;
+            //         const y = Math.sin(time + i) * 3; 
+            //         mesh.position.lerp(new THREE.Vector3(x, y, z), 0.1);
+            //         mesh.lookAt(camera.position);
+            //         if (z > maxZ) { maxZ = z; bestIdx = i; }
+            //         if (z > 5) { 
+            //             const ds = 1.0 + (z/CONFIG.photoOrbitRadius)*0.8; 
+            //             mesh.scale.lerp(new THREE.Vector3(ds, ds, ds), 0.1);
+            //         } else {
+            //             mesh.scale.lerp(new THREE.Vector3(0.6, 0.6, 0.6), 0.1);
+            //         }
+            //     });
+            //     selectedIndex = bestIdx;
+
+        } 
+    else if (state === 'EXPLODE') {
+        titleMesh.visible = false;
+        starMesh.visible = false;
+        loveMesh.visible = false;
+
+        photoMeshes.forEach((mesh, i) => {
+            mesh.visible = true;
+
+            // 🌲 Random tree ornament positions (precomputed)
+            mesh.position.lerp(photoTargets[i], 0.08);
+
+            // ✨ Subtle floating
+            mesh.position.y += Math.sin(time + i) * 0.02;
+
+            mesh.lookAt(camera.position);
+            mesh.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
+        });
 
             } else if (state === 'PHOTO') {
                 loveMesh.visible = false;

@@ -1,233 +1,195 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Christmas Tree Memories</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>Christmas Tree Memories</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: black;
-      color: white;
-      font-family: system-ui, sans-serif;
-    }
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: black;
+  color: white;
+  font-family: system-ui, sans-serif;
+}
+canvas { position: fixed; inset: 0; }
 
-    canvas {
-      position: fixed;
-      inset: 0;
-    }
+.photo {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border: 4px solid gold;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+.photo.open {
+  transform: scale(2.5);
+  z-index: 999;
+}
 
-    .photo {
-      position: absolute;
-      width: 90px;
-      height: 90px;
-      object-fit: cover;
-      border: 4px solid gold;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: transform 0.3s ease, z-index 0.3s;
-    }
-
-    .photo.open {
-      transform: scale(2.5);
-      z-index: 999;
-    }
-
-    #hint {
-      position: fixed;
-      bottom: 12px;
-      width: 100%;
-      text-align: center;
-      font-size: 14px;
-      opacity: 0.7;
-    }
-  </style>
+#hint {
+  position: fixed;
+  bottom: 10px;
+  width: 100%;
+  text-align: center;
+  font-size: 14px;
+  opacity: 0.7;
+}
+</style>
 </head>
 
 <body>
-  <canvas id="bg"></canvas>
-  <div id="hint">✊ Move tree | ✌️ Open photo | 🖱 Mouse drag supported</div>
+<canvas id="bg"></canvas>
+<div id="hint">✊ Drag tree | ✌️ Open photo | 🖱 Mouse always works</div>
 
-  <!-- MediaPipe -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<!-- MediaPipe (CPU-safe versions) -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/hands.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.min.js"></script>
 
-  <script>
-    /* =========================
-       CANVAS BACKGROUND (SPARKLES)
-    ========================== */
-    const canvas = document.getElementById("bg");
-    const ctx = canvas.getContext("2d");
+<script>
+/* ================= BACKGROUND ================= */
+const canvas = document.getElementById("bg");
+const ctx = canvas.getContext("2d");
+function resize() {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+}
+resize();
+addEventListener("resize", resize);
 
-    function resize() {
-      canvas.width = innerWidth;
-      canvas.height = innerHeight;
-    }
-    window.addEventListener("resize", resize);
-    resize();
+const sparks = Array.from({ length: 700 }, () => ({
+  x: Math.random() * canvas.width,
+  y: Math.random() * canvas.height,
+  r: Math.random() * 2 + 1
+}));
 
-    const sparks = Array.from({ length: 700 }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      r: Math.random() * 2 + 1
-    }));
+function animateBg() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle = "gold";
+  sparks.forEach(s => {
+    s.y -= 0.4;
+    if (s.y < 0) s.y = canvas.height;
+    ctx.fillRect(s.x, s.y, s.r, s.r);
+  });
+  requestAnimationFrame(animateBg);
+}
+animateBg();
 
-    function animateBg() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "gold";
-      sparks.forEach(s => {
-        s.y -= 0.4;
-        if (s.y < 0) s.y = canvas.height;
-        ctx.fillRect(s.x, s.y, s.r, s.r);
-      });
-      requestAnimationFrame(animateBg);
-    }
-    animateBg();
+/* ================= IMAGES ================= */
+const images = [
+ "image1.jpeg","image2.jpeg","image3.jpeg","image4.jpeg","image5.jpeg",
+ "image6.jpeg","image7.jpeg","image8.jpeg","image9.jpeg","image10.jpeg",
+ "image11.jpeg","image12.jpeg","image13.jpeg","image14.jpeg","image15.jpeg"
+];
 
-    /* =========================
-       IMAGES (TREE SHAPE)
-    ========================== */
-    const images = [
-      "image1.jpeg","image2.jpeg","image3.jpeg","image4.jpeg","image5.jpeg",
-      "image6.jpeg","image7.jpeg","image8.jpeg","image9.jpeg","image10.jpeg",
-      "image11.jpeg","image12.jpeg","image13.jpeg","image14.jpeg","image15.jpeg"
-    ];
+let offsetX = 0, offsetY = 0;
+const photos = [];
 
-    let offsetX = 0;
-    let offsetY = 0;
-    const photoEls = [];
+images.forEach(src => {
+  const img = document.createElement("img");
+  img.src = src;
+  img.className = "photo";
 
-    images.forEach((src, i) => {
-      const img = document.createElement("img");
-      img.src = src;
-      img.className = "photo";
+  const level = Math.random();
+  const spread = level * 320;
+  img.dataset.x = innerWidth/2 + (Math.random()-0.5)*spread;
+  img.dataset.y = innerHeight/2 + level*420 - 200;
 
-      const level = Math.random();
-      const spread = level * 300;
-      const x = innerWidth / 2 + (Math.random() - 0.5) * spread;
-      const y = innerHeight / 2 + level * 400 - 200;
+  img.onclick = () => img.classList.toggle("open");
 
-      img.dataset.baseX = x;
-      img.dataset.baseY = y;
+  document.body.appendChild(img);
+  photos.push(img);
+});
 
-      img.style.left = x + "px";
-      img.style.top = y + "px";
+function updatePhotos() {
+  photos.forEach(p => {
+    p.style.left = (+p.dataset.x + offsetX) + "px";
+    p.style.top  = (+p.dataset.y + offsetY) + "px";
+  });
+}
+updatePhotos();
 
-      img.onclick = () => img.classList.toggle("open");
+/* ================= MOUSE DRAG ================= */
+let drag = false, lx=0, ly=0;
+addEventListener("mousedown", e => {
+  drag = true; lx=e.clientX; ly=e.clientY;
+});
+addEventListener("mouseup", ()=>drag=false);
+addEventListener("mousemove", e => {
+  if(!drag) return;
+  offsetX += e.clientX-lx;
+  offsetY += e.clientY-ly;
+  lx=e.clientX; ly=e.clientY;
+  updatePhotos();
+});
 
-      document.body.appendChild(img);
-      photoEls.push(img);
+/* ================= HAND TRACKING ================= */
+const video = document.createElement("video");
+video.style.display = "none";
+document.body.appendChild(video);
+
+let lastX=null, lastY=null;
+
+const hands = new Hands({
+  locateFile: file =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 0,     // 🔴 IMPORTANT
+  selfieMode: true,
+  minDetectionConfidence: 0.6,
+  minTrackingConfidence: 0.6
+});
+
+hands.onResults(results => {
+  if (!results.multiHandLandmarks) return;
+  const lm = results.multiHandLandmarks[0];
+  const i = lm[8], m = lm[12];
+  const x = i.x * innerWidth;
+  const y = i.y * innerHeight;
+  const dist = Math.hypot(i.x-m.x, i.y-m.y);
+
+  // ✊ fist → move tree
+  if (dist < 0.04 && lastX !== null) {
+    offsetX += x-lastX;
+    offsetY += y-lastY;
+    updatePhotos();
+  }
+
+  // ✌️ open nearest
+  if (dist > 0.08) {
+    photos.forEach(p=>p.classList.remove("open"));
+    photos.forEach(p=>{
+      const r=p.getBoundingClientRect();
+      if (Math.hypot(r.left+45-x,r.top+45-y)<60)
+        p.classList.add("open");
     });
+  }
+  lastX=x; lastY=y;
+});
 
-    function updatePhotos() {
-      photoEls.forEach(p => {
-        p.style.left = (+p.dataset.baseX + offsetX) + "px";
-        p.style.top  = (+p.dataset.baseY + offsetY) + "px";
-      });
-    }
+const camera = new Camera(video, {
+  onFrame: async () => {
+    try { await hands.send({ image: video }); }
+    catch(e){}
+  },
+  width: 640, height: 480
+});
 
-    /* =========================
-       MOUSE FALLBACK
-    ========================== */
-    let dragging = false;
-    let lastX = 0, lastY = 0;
-
-    document.addEventListener("mousedown", e => {
-      dragging = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
-    });
-
-    document.addEventListener("mouseup", () => dragging = false);
-
-    document.addEventListener("mousemove", e => {
-      if (!dragging) return;
-      offsetX += e.clientX - lastX;
-      offsetY += e.clientY - lastY;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      updatePhotos();
-    });
-
-    /* =========================
-       MEDIAPIPE HANDS
-    ========================== */
-    const video = document.createElement("video");
-    video.style.display = "none";
-    document.body.appendChild(video);
-
-    const hands = new Hands({
-      locateFile: file =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-    });
-
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.6,
-      minTrackingConfidence: 0.6
-    });
-
-    let lastHandX = null;
-    let lastHandY = null;
-
-    hands.onResults(results => {
-      if (!results.multiHandLandmarks) return;
-
-      const lm = results.multiHandLandmarks[0];
-      const index = lm[8];
-      const middle = lm[12];
-      const thumb = lm[4];
-
-      const x = index.x * innerWidth;
-      const y = index.y * innerHeight;
-
-      const distIM = Math.hypot(
-        index.x - middle.x,
-        index.y - middle.y
-      );
-
-      // ✊ FIST → MOVE TREE
-      if (distIM < 0.04) {
-        if (lastHandX !== null) {
-          offsetX += x - lastHandX;
-          offsetY += y - lastHandY;
-          updatePhotos();
-        }
-      }
-
-      // ✌️ TWO FINGERS → OPEN NEAREST
-      if (distIM > 0.08) {
-        photoEls.forEach(p => p.classList.remove("open"));
-        photoEls.forEach(p => {
-          const px = p.getBoundingClientRect().left + 45;
-          const py = p.getBoundingClientRect().top + 45;
-          if (Math.hypot(px - x, py - y) < 60) {
-            p.classList.add("open");
-          }
-        });
-      }
-
-      lastHandX = x;
-      lastHandY = y;
-    });
-
-    const camera = new Camera(video, {
-      onFrame: async () => {
-        await hands.send({ image: video });
-      },
-      width: 640,
-      height: 480
-    });
-
-    // Required user interaction
-    document.body.addEventListener("click", () => {
-      camera.start();
-    }, { once: true });
-
-  </script>
+/* USER GESTURE REQUIRED */
+document.body.addEventListener("click", async () => {
+  try { await camera.start(); }
+  catch {
+    document.getElementById("hint").innerText =
+      "Camera blocked — mouse still works";
+  }
+},{once:true});
+</script>
 </body>
 </html>

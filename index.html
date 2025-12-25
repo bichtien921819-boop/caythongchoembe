@@ -1,226 +1,233 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Magic Christmas Tree – Full Interactive</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8" />
+  <title>Christmas Tree Memories</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: black;
+      color: white;
+      font-family: system-ui, sans-serif;
+    }
 
-<style>
-body { margin:0; overflow:hidden; background:#000; font-family:sans-serif }
-#ui { position:absolute; bottom:20px; width:100%; text-align:center; z-index:10 }
-button {
-  padding:15px 40px;
-  font-size:18px;
-  font-weight:bold;
-  border-radius:30px;
-  border:2px solid gold;
-  background:linear-gradient(#c00,#800);
-  color:white;
-}
-#cam { position:absolute; top:10px; right:10px; width:120px; height:90px; opacity:.6; transform:scaleX(-1) }
-</style>
+    canvas {
+      position: fixed;
+      inset: 0;
+    }
+
+    .photo {
+      position: absolute;
+      width: 90px;
+      height: 90px;
+      object-fit: cover;
+      border: 4px solid gold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.3s ease, z-index 0.3s;
+    }
+
+    .photo.open {
+      transform: scale(2.5);
+      z-index: 999;
+    }
+
+    #hint {
+      position: fixed;
+      bottom: 12px;
+      width: 100%;
+      text-align: center;
+      font-size: 14px;
+      opacity: 0.7;
+    }
+  </style>
 </head>
 
 <body>
-<div id="ui">
-  <div style="color:#fff;opacity:.7;margin-bottom:10px">
-    ✊ Fist = Tree | 🖐 Open = Explode | ✌️ Two fingers = Open Image | ❤️ Two hands = Love
-  </div>
-  <button onclick="start()">START MAGIC</button>
-</div>
+  <canvas id="bg"></canvas>
+  <div id="hint">✊ Move tree | ✌️ Open photo | 🖱 Mouse drag supported</div>
 
-<canvas id="cam"></canvas>
+  <!-- MediaPipe -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
-<script>
-/* ================== CONFIG ================== */
-const IMAGE_COUNT = 15;
-const photoFiles = Array.from({length:IMAGE_COUNT},(_,i)=>`./image${i+1}.jpeg`);
+  <script>
+    /* =========================
+       CANVAS BACKGROUND (SPARKLES)
+    ========================== */
+    const canvas = document.getElementById("bg");
+    const ctx = canvas.getContext("2d");
 
-const CONFIG = {
-  treeHeight: 70,
-  treeRadius: 35,
-  orbitRadius: 28
-};
+    function resize() {
+      canvas.width = innerWidth;
+      canvas.height = innerHeight;
+    }
+    window.addEventListener("resize", resize);
+    resize();
 
-let scene,camera,renderer;
-let gold,photos=[];
-let state="TREE";
-let selected=0;
-let handPos={x:0,y:0};
+    const sparks = Array.from({ length: 700 }, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 2 + 1
+    }));
 
-/* ================== INIT ================== */
-function start(){
-  document.getElementById("ui").style.display="none";
-  init3D();
-  initHands();
-}
+    function animateBg() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "gold";
+      sparks.forEach(s => {
+        s.y -= 0.4;
+        if (s.y < 0) s.y = canvas.height;
+        ctx.fillRect(s.x, s.y, s.r, s.r);
+      });
+      requestAnimationFrame(animateBg);
+    }
+    animateBg();
 
-function init3D(){
-  scene=new THREE.Scene();
-  scene.fog=new THREE.FogExp2(0x000000,0.002);
+    /* =========================
+       IMAGES (TREE SHAPE)
+    ========================== */
+    const images = [
+      "image1.jpeg","image2.jpeg","image3.jpeg","image4.jpeg","image5.jpeg",
+      "image6.jpeg","image7.jpeg","image8.jpeg","image9.jpeg","image10.jpeg",
+      "image11.jpeg","image12.jpeg","image13.jpeg","image14.jpeg","image15.jpeg"
+    ];
 
-  camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.1,1000);
-  camera.position.z=120;
+    let offsetX = 0;
+    let offsetY = 0;
+    const photoEls = [];
 
-  renderer=new THREE.WebGLRenderer({antialias:true});
-  renderer.setSize(innerWidth,innerHeight);
-  document.body.appendChild(renderer.domElement);
+    images.forEach((src, i) => {
+      const img = document.createElement("img");
+      img.src = src;
+      img.className = "photo";
 
-  createTree();
-  createPhotos();
-  animate();
-}
+      const level = Math.random();
+      const spread = level * 300;
+      const x = innerWidth / 2 + (Math.random() - 0.5) * spread;
+      const y = innerHeight / 2 + level * 400 - 200;
 
-/* ================== TREE ================== */
-function createTree(){
-  const geo=new THREE.BufferGeometry();
-  const count=2000;
-  const pos=[];
+      img.dataset.baseX = x;
+      img.dataset.baseY = y;
 
-  for(let i=0;i<count;i++){
-    const h=Math.random()*CONFIG.treeHeight;
-    const r=(1-h/CONFIG.treeHeight)*CONFIG.treeRadius*Math.random();
-    const t=Math.random()*Math.PI*2;
-    pos.push(Math.cos(t)*r,h-CONFIG.treeHeight/2,Math.sin(t)*r);
-  }
+      img.style.left = x + "px";
+      img.style.top = y + "px";
 
-  geo.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));
-  const mat=new THREE.PointsMaterial({
-    size:2,
-    color:0xffd700,
-    transparent:true,
-    blending:THREE.AdditiveBlending
-  });
-  gold=new THREE.Points(geo,mat);
-  scene.add(gold);
-}
+      img.onclick = () => img.classList.toggle("open");
 
-/* ================== PHOTOS ================== */
-function createPhotos(){
-  const loader=new THREE.TextureLoader();
-  const geo=new THREE.PlaneGeometry(8,8);
+      document.body.appendChild(img);
+      photoEls.push(img);
+    });
 
-  photoFiles.forEach((src,i)=>{
-    const mat=new THREE.MeshBasicMaterial({map:loader.load(src),side:THREE.DoubleSide});
-    const mesh=new THREE.Mesh(geo,mat);
+    function updatePhotos() {
+      photoEls.forEach(p => {
+        p.style.left = (+p.dataset.baseX + offsetX) + "px";
+        p.style.top  = (+p.dataset.baseY + offsetY) + "px";
+      });
+    }
 
-    const h=Math.random()*CONFIG.treeHeight-CONFIG.treeHeight/2;
-    const r=Math.random()*CONFIG.treeRadius*(1-Math.abs(h)/CONFIG.treeHeight);
-    const t=Math.random()*Math.PI*2;
+    /* =========================
+       MOUSE FALLBACK
+    ========================== */
+    let dragging = false;
+    let lastX = 0, lastY = 0;
 
-    mesh.userData.home=new THREE.Vector3(
-      Math.cos(t)*r,
-      h,
-      Math.sin(t)*r
-    );
+    document.addEventListener("mousedown", e => {
+      dragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+    });
 
-    mesh.position.copy(mesh.userData.home);
-    scene.add(mesh);
-    photos.push(mesh);
-  });
-}
+    document.addEventListener("mouseup", () => dragging = false);
 
-/* ================== ANIMATE ================== */
-function animate(){
-  requestAnimationFrame(animate);
+    document.addEventListener("mousemove", e => {
+      if (!dragging) return;
+      offsetX += e.clientX - lastX;
+      offsetY += e.clientY - lastY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      updatePhotos();
+    });
 
-  gold.rotation.y+=0.002;
-  gold.position.x=handPos.x*40;
-  gold.position.y=handPos.y*30;
+    /* =========================
+       MEDIAPIPE HANDS
+    ========================== */
+    const video = document.createElement("video");
+    video.style.display = "none";
+    document.body.appendChild(video);
 
-  if(state==="EXPLODE"){
-    photos.forEach((m,i)=>{
-      const angle=i*(Math.PI*2/photos.length);
-      const target=new THREE.Vector3(
-        Math.sin(angle)*CONFIG.orbitRadius,
-        Math.sin(Date.now()*0.002+i)*4,
-        Math.cos(angle)*CONFIG.orbitRadius
+    const hands = new Hands({
+      locateFile: file =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.6
+    });
+
+    let lastHandX = null;
+    let lastHandY = null;
+
+    hands.onResults(results => {
+      if (!results.multiHandLandmarks) return;
+
+      const lm = results.multiHandLandmarks[0];
+      const index = lm[8];
+      const middle = lm[12];
+      const thumb = lm[4];
+
+      const x = index.x * innerWidth;
+      const y = index.y * innerHeight;
+
+      const distIM = Math.hypot(
+        index.x - middle.x,
+        index.y - middle.y
       );
-      m.position.lerp(target,0.08);
-      m.lookAt(camera.position);
-    });
-  }
 
-  if(state==="TREE"){
-    photos.forEach(m=>{
-      m.position.lerp(m.userData.home,0.08);
-      m.scale.lerp(new THREE.Vector3(0.8,0.8,0.8),0.1);
-    });
-  }
-
-  if(state==="PHOTO"){
-    photos.forEach((m,i)=>{
-      if(i===selected){
-        m.position.lerp(new THREE.Vector3(0,0,60),0.1);
-        m.scale.lerp(new THREE.Vector3(5,5,5),0.1);
-      }else{
-        m.scale.lerp(new THREE.Vector3(0,0,0),0.1);
+      // ✊ FIST → MOVE TREE
+      if (distIM < 0.04) {
+        if (lastHandX !== null) {
+          offsetX += x - lastHandX;
+          offsetY += y - lastHandY;
+          updatePhotos();
+        }
       }
-    });
-  }
 
-  renderer.render(scene,camera);
-}
-
-/* ================== HANDS ================== */
-function initHands(){
-  const video=document.createElement("video");
-  const camCanvas=document.getElementById("cam");
-  const ctx=camCanvas.getContext("2d");
-
-  const hands=new Hands({
-    locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
-  });
-
-  hands.setOptions({
-    maxNumHands:2,
-    minDetectionConfidence:.5,
-    minTrackingConfidence:.5
-  });
-
-  hands.onResults(res=>{
-    ctx.clearRect(0,0,120,90);
-    ctx.drawImage(res.image,0,0,120,90);
-
-    if(res.multiHandLandmarks.length===2){
-      state="HEART";
-      return;
-    }
-
-    if(res.multiHandLandmarks.length){
-      const lm=res.multiHandLandmarks[0];
-      handPos.x=lm[9].x-.5;
-      handPos.y=.5-lm[9].y;
-
-      const pinch=Math.hypot(lm[4].x-lm[8].x,lm[4].y-lm[8].y);
-      const open=Math.hypot(lm[8].x-lm[0].x,lm[8].y-lm[0].y);
-
-      if(pinch<0.05){
-        state="PHOTO";
-      }else if(open>0.3){
-        state="EXPLODE";
-      }else{
-        state="TREE";
+      // ✌️ TWO FINGERS → OPEN NEAREST
+      if (distIM > 0.08) {
+        photoEls.forEach(p => p.classList.remove("open"));
+        photoEls.forEach(p => {
+          const px = p.getBoundingClientRect().left + 45;
+          const py = p.getBoundingClientRect().top + 45;
+          if (Math.hypot(px - x, py - y) < 60) {
+            p.classList.add("open");
+          }
+        });
       }
-    }
-  });
 
-  const cam=new Camera(video,{
-    onFrame:async()=>hands.send({image:video}),
-    width:320,height:240
-  });
-  cam.start();
-}
+      lastHandX = x;
+      lastHandY = y;
+    });
 
-window.addEventListener("resize",()=>{
-  camera.aspect=innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
-});
-</script>
+    const camera = new Camera(video, {
+      onFrame: async () => {
+        await hands.send({ image: video });
+      },
+      width: 640,
+      height: 480
+    });
+
+    // Required user interaction
+    document.body.addEventListener("click", () => {
+      camera.start();
+    }, { once: true });
+
+  </script>
 </body>
 </html>
